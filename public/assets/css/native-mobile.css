@@ -1,0 +1,110 @@
+/* Native mobile layer */
+
+.native-tabbar {
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  z-index: 50;
+  display: flex;
+  justify-content: space-around;
+  align-items: stretch;
+  height: calc(49px + env(safe-area-inset-bottom, 0px));
+  padding-bottom: env(safe-area-inset-bottom, 0px);
+  background: rgba(255, 255, 255, 0.82);
+  backdrop-filter: saturate(180%) blur(20px);
+  -webkit-backdrop-filter: saturate(180%) blur(20px);
+  border-top: 0.5px solid rgba(60, 60, 67, 0.18);
+}
+
+body.ios-dark .native-tabbar {
+  background: rgba(22, 22, 24, 0.88);
+  border-top-color: rgba(84, 84, 88, 0.65);
+}
+
+.native-tab {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  min-height: 49px;
+  padding: 4px 2px 2px;
+  text-decoration: none;
+  color: #8e8e93;
+  -webkit-tap-highlight-color: transparent;
+  transition: color 0.15s ease;
+}
+
+.native-tab svg {
+  width: 24px;
+  height: 24px;
+  stroke-width: 1.75;
+}
+
+.native-tab span {
+  font-size: 10px;
+  font-weight: 500;
+  letter-spacing: 0.01em;
+  line-height: 1.2;
+}
+
+.native-tab.tab-active {
+  color: #007aff;
+}
+
+body.ios-dark .native-tab.tab-active {
+  color: #0a84ff;
+}
+
+.has-tabbar {
+  padding-bottom: calc(64px + env(safe-area-inset-bottom, 0px)) !important;
+}
+
+.has-tabbar .sticky-bar,
+.has-tabbar .fixed.bottom-0 {
+  bottom: calc(49px + env(safe-area-inset-bottom, 0px)) !important;
+}
+
+@media (max-width: 640px) {
+  .ios-large-title { font-size: 28px; }
+}
+
+.ios-back {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  color: #007aff;
+  font-size: 17px;
+  font-weight: 400;
+  text-decoration: none;
+  min-height: 44px;
+  padding: 0 4px;
+  margin-left: -4px;
+}
+
+.native-fab {
+  position: fixed;
+  right: 16px;
+  bottom: calc(68px + env(safe-area-inset-bottom, 0px));
+  z-index: 40;
+  width: 56px;
+  height: 56px;
+  border-radius: 28px;
+  background: #007aff;
+  color: #fff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 4px 14px rgba(0, 122, 255, 0.4);
+  border: none;
+  cursor: pointer;
+}
+
+.native-fab:active { transform: scale(0.92); }
+
+.native-scroll {
+  -webkit-overflow-scrolling: touch;
+  overscroll-behavior-y: contain;
+}
