@@ -3,54 +3,36 @@ declare(strict_types=1);
 
 require_once dirname(__DIR__) . '/src/bootstrap.php';
 
+use App\Core\Auth;
 use App\Core\Database;
 use App\Core\I18n;
 
-if (session_status() === PHP_SESSION_NONE) {
-    session_start();
-}
+Auth::startSession();
 
-if (!empty($_SESSION['user_id'])) {
-    $role = $_SESSION['role'] ?? 'customer';
-    if ($role === 'admin') {
-        header('Location: /admin/dashboard.php');
-        exit;
-    }
+if (Auth::check()) {
+    $role = Auth::role();
+    if ($role === 'admin') { header('Location: /admin/dashboard.php'); exit; }
     if ($role === 'stylist') {
-        $stylist = Database::fetch("SELECT id FROM stylists WHERE user_id = ?", [$_SESSION['user_id']]);
-        header('Location: /stylist/station.php?stylist_id=' . ($stylist['id'] ?? 1));
-        exit;
+        $stylist = Database::fetch("SELECT id FROM stylists WHERE user_id = ?", [Auth::id()]);
+        header('Location: /stylist/station.php?stylist_id=' . ($stylist['id'] ?? 1)); exit;
     }
+    header('Location: /profile.php'); exit;
 }
 
 $error = '';
-
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-    $phone = trim($_POST['phone'] ?? '');
-    $password = $_POST['password'] ?? '';
-
-    $user = Database::fetch(
-        "SELECT * FROM users WHERE phone = ? AND role IN ('admin','stylist') LIMIT 1",
-        [$phone]
-    );
-
-    if ($user && password_verify($password, $user['password_hash'] ?? '')) {
-        $_SESSION['user_id'] = $user['id'];
-        $_SESSION['role'] = $user['role'];
-        $_SESSION['full_name'] = $user['full_name'];
-
-        if ($user['role'] === 'admin') {
-            header('Location: /admin/dashboard.php');
-        } else {
+    $user = Auth::attempt(trim($_POST['phone'] ?? ''), $_POST['password'] ?? '');
+    if ($user && in_array($user['role'], ['admin', 'stylist'], true)) {
+        if ($user['role'] === 'admin') { header('Location: /admin/dashboard.php'); }
+        else {
             $stylist = Database::fetch("SELECT id FROM stylists WHERE user_id = ?", [$user['id']]);
             header('Location: /stylist/station.php?stylist_id=' . ($stylist['id'] ?? 1));
         }
         exit;
     }
-
+    if ($user && $user['role'] === 'customer') { header('Location: /profile.php'); exit; }
     $error = 'Invalid phone or password';
 }
-
 $lang = I18n::getLocale();
 ?>
 <!DOCTYPE html>
@@ -73,37 +55,18 @@ $lang = I18n::getLocale();
             <h1 class="text-2xl font-extrabold tracking-tight">Elite Cuts</h1>
             <p class="text-sm text-zinc-400 mt-1">Staff & Admin Login</p>
         </div>
-
         <form method="POST" class="bg-zinc-900 border border-zinc-800 rounded-2xl p-6 space-y-4">
-            <?php if ($error): ?>
-            <div class="px-3 py-2 rounded-lg bg-rose-500/15 text-rose-400 text-sm font-medium text-center">
-                <?= htmlspecialchars($error) ?>
-            </div>
-            <?php endif; ?>
-
-            <div>
-                <label class="block text-xs font-semibold text-zinc-400 mb-1.5 uppercase tracking-wider">Phone</label>
-                <input type="tel" name="phone" required
-                       placeholder="+251911000001"
-                       class="w-full px-4 py-3 rounded-xl bg-zinc-800 border border-zinc-700 text-sm placeholder:text-zinc-500 focus:outline-none focus:ring-2 focus:ring-amber-500/40 focus:border-amber-500">
-            </div>
-            <div>
-                <label class="block text-xs font-semibold text-zinc-400 mb-1.5 uppercase tracking-wider">Password</label>
-                <input type="password" name="password" required
-                       placeholder="••••••••"
-                       class="w-full px-4 py-3 rounded-xl bg-zinc-800 border border-zinc-700 text-sm placeholder:text-zinc-500 focus:outline-none focus:ring-2 focus:ring-amber-500/40 focus:border-amber-500">
-            </div>
-            <button type="submit"
-                    class="w-full py-3.5 rounded-xl bg-amber-500 text-zinc-950 font-bold text-sm hover:bg-amber-400 active:scale-[0.98] transition-all">
-                Sign In
-            </button>
+            <?php if ($error): ?><div class="px-3 py-2 rounded-lg bg-rose-500/15 text-rose-400 text-sm font-medium text-center"><?= htmlspecialchars($error) ?></div><?php endif; ?>
+            <div><label class="block text-xs font-semibold text-zinc-400 mb-1.5 uppercase tracking-wider">Phone</label>
+                <input type="tel" name="phone" required placeholder="+251911000001" class="w-full px-4 py-3 rounded-xl bg-zinc-800 border border-zinc-700 text-sm placeholder:text-zinc-500 focus:outline-none focus:ring-2 focus:ring-amber-500/40 focus:border-amber-500"></div>
+            <div><label class="block text-xs font-semibold text-zinc-400 mb-1.5 uppercase tracking-wider">Password</label>
+                <input type="password" name="password" required placeholder="••••••••" class="w-full px-4 py-3 rounded-xl bg-zinc-800 border border-zinc-700 text-sm placeholder:text-zinc-500 focus:outline-none focus:ring-2 focus:ring-amber-500/40 focus:border-amber-500"></div>
+            <button type="submit" class="w-full py-3.5 rounded-xl bg-amber-500 text-zinc-950 font-bold text-sm hover:bg-amber-400 active:scale-[0.98] transition-all">Sign In</button>
         </form>
-
-        <p class="text-center text-xs text-zinc-500 mt-6">
-            Demo: <code class="text-zinc-400">+251911000001</code> / <code class="text-zinc-400">password</code>
-        </p>
-        <p class="text-center mt-4">
-            <a href="/queue.php" class="text-sm text-zinc-400 hover:text-white transition-colors">← Customer Kiosk</a>
+        <p class="text-center text-xs text-zinc-500 mt-6">Demo: <code class="text-zinc-400">+251911000001</code> / <code class="text-zinc-400">password</code></p>
+        <p class="text-center mt-4 space-x-4">
+            <a href="/queue.php" class="text-sm text-zinc-400 hover:text-white transition-colors">Customer Kiosk</a>
+            <a href="/profile.php" class="text-sm text-zinc-400 hover:text-white transition-colors">My Profile</a>
         </p>
     </div>
     <script>lucide.createIcons();</script>
