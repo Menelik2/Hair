@@ -1,6 +1,11 @@
 <?php
 declare(strict_types=1);
 
+/**
+ * Application bootstrap
+ * Include this at the top of every public PHP entry point.
+ */
+
 error_reporting(E_ALL);
 ini_set('display_errors', '0');
 ini_set('log_errors', '1');
@@ -11,17 +16,26 @@ date_default_timezone_set('Africa/Addis_Ababa');
 spl_autoload_register(function (string $class): void {
     $prefix = 'App\\';
     $baseDir = __DIR__ . '/';
-    if (strncmp($prefix, $class, strlen($prefix)) !== 0) return;
+
+    if (strncmp($prefix, $class, strlen($prefix)) !== 0) {
+        return;
+    }
+
     $relative = substr($class, strlen($prefix));
     $file = $baseDir . str_replace('\\', '/', $relative) . '.php';
-    if (file_exists($file)) require $file;
+
+    if (file_exists($file)) {
+        require $file;
+    }
 });
 
 $envFile = dirname(__DIR__) . '/.env';
 if (file_exists($envFile)) {
     $lines = file($envFile, FILE_IGNORE_NEW_LINES | FILE_SKIP_EMPTY_LINES);
     foreach ($lines as $line) {
-        if (str_starts_with(trim($line), '#')) continue;
+        if (str_starts_with(trim($line), '#')) {
+            continue;
+        }
         if (str_contains($line, '=')) {
             [$name, $value] = explode('=', $line, 2);
             $name = trim($name);
