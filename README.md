@@ -1,26 +1,29 @@
 # Elite Cuts — Barbershop Queue & Appointment Management System
 
-Production-ready native PHP 8.2+ system for premium barbershops.
+Production-ready native **PHP 8.2+** system for premium barbershops.
 
-## Features
+## Live URLs
 
-| Feature | URL |
-|---------|-----|
+| Feature | Path |
+|---------|------|
 | Customer Kiosk | `/queue.php` |
 | Live Digital Ticket | `/ticket.php?code=A-01` |
 | Book Appointment | `/appointments.php` |
+| Customer Profile | `/profile.php` |
 | Barber Station | `/stylist/station.php?stylist_id=1` |
 | Live TV Board | `/live-board.php` |
 | Admin Dashboard | `/admin/dashboard.php` |
 | Staff Login | `/login.php` |
 
 ## Tech Stack
-- PHP 8.2+ (strict types)
+
+- PHP 8.2+ (strict types, PDO)
 - MySQL 8.0+
 - Tailwind CSS + Alpine.js + Lucide + Chart.js
 - Server-Sent Events (real-time)
 - Web Audio API (tactile sounds)
 - Bilingual: English + Amharic
+- Auth: Argon2id + RBAC (admin / stylist / customer)
 
 ## Quick Start
 
@@ -38,29 +41,37 @@ php -S localhost:8080
 ```
 
 ## Demo Credentials
-- **Admin / Stylist**: phone `+251911000001` / password `password`
+
+- **Admin / Stylist:** phone `+251911000001` / password `password`
 
 ## Project Structure
+
 ```
 ├── config/database.php
 ├── database/schema.sql
 ├── public/
-│   ├── queue.php          # Customer kiosk
-│   ├── ticket.php         # Live digital pass
-│   ├── appointments.php   # Book appointment
-│   ├── live-board.php     # TV display
-│   ├── login.php          # Staff login
+│   ├── queue.php
+│   ├── ticket.php
+│   ├── appointments.php
+│   ├── profile.php
+│   ├── live-board.php
+│   ├── login.php
 │   ├── admin/dashboard.php
 │   ├── stylist/station.php
 │   ├── sse.php
 │   └── assets/js/audio.js
 ├── src/
 │   ├── bootstrap.php
-│   ├── Core/Database.php
-│   ├── Core/I18n.php
-│   └── Services/QueueService.php
+│   ├── Core/
+│   │   ├── Auth.php
+│   │   ├── Database.php
+│   │   └── I18n.php
+│   └── Services/
+│       ├── QueueService.php
+│       └── AnalyticsService.php
 └── .env.example
 ```
 
 ## License
+
 Private — All rights reserved.
