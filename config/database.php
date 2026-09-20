@@ -1,12 +1,6 @@
 <?php
 declare(strict_types=1);
 
-/**
- * Database configuration
- * Copy this file and adjust credentials for your environment.
- * Never commit real production credentials.
- */
-
 return [
     'driver'   => getenv('DB_DRIVER') ?: 'mysql',
     'host'     => getenv('DB_HOST') ?: '127.0.0.1',
