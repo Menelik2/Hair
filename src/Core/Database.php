@@ -61,9 +61,6 @@ final class Database
         return self::$instance;
     }
 
-    /**
-     * Begin a transaction with optional isolation level.
-     */
     public static function beginTransaction(): bool
     {
         return self::getInstance()->beginTransaction();
@@ -84,9 +81,6 @@ final class Database
         return self::getInstance()->inTransaction();
     }
 
-    /**
-     * Execute a prepared statement safely.
-     */
     public static function query(string $sql, array $params = []): PDOStatement
     {
         $stmt = self::getInstance()->prepare($sql);
@@ -94,43 +88,28 @@ final class Database
         return $stmt;
     }
 
-    /**
-     * Fetch a single row.
-     */
     public static function fetch(string $sql, array $params = []): ?array
     {
         $result = self::query($sql, $params)->fetch();
         return $result === false ? null : $result;
     }
 
-    /**
-     * Fetch all rows.
-     */
     public static function fetchAll(string $sql, array $params = []): array
     {
         return self::query($sql, $params)->fetchAll();
     }
 
-    /**
-     * Insert and return last insert ID.
-     */
     public static function insert(string $sql, array $params = []): string
     {
         self::query($sql, $params);
         return self::getInstance()->lastInsertId();
     }
 
-    /**
-     * Execute and return affected rows.
-     */
     public static function execute(string $sql, array $params = []): int
     {
         return self::query($sql, $params)->rowCount();
     }
 
-    /**
-     * Simple health check.
-     */
     public static function ping(): bool
     {
         try {
