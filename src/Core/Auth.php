@@ -5,9 +5,6 @@ namespace App\Core;
 
 use RuntimeException;
 
-/**
- * Session-based authentication with role-based access control.
- */
 final class Auth
 {
     private const SESSION_KEY = 'auth_user';
@@ -27,10 +24,25 @@ final class Auth
 
     public static function attempt(string $phone, string $password): ?array
     {
-        $phone = preg_replace('/\D+/', '', $phone);
+        $digits = preg_replace('/\D+/', '', $phone) ?? '';
+        if ($digits === '') {
+            return null;
+        }
+
+        $candidates = array_unique(array_filter([
+            $phone,
+            $digits,
+            '+' . $digits,
+            (str_starts_with($digits, '251') ? '0' . substr($digits, 3) : null),
+            (str_starts_with($digits, '0') ? '251' . substr($digits, 1) : null),
+            (str_starts_with($digits, '0') ? '+251' . substr($digits, 1) : null),
+            (str_starts_with($digits, '251') ? '+251' . substr($digits, 3) : null),
+        ]));
+
+        $placeholders = implode(',', array_fill(0, count($candidates), '?'));
         $user = Database::fetch(
-            "SELECT * FROM users WHERE phone = ? LIMIT 1",
-            [$phone]
+            "SELECT * FROM users WHERE phone IN ($placeholders) LIMIT 1",
+            array_values($candidates)
         );
 
         if (!$user || empty($user['password_hash'])) {
