@@ -12,18 +12,20 @@ use Throwable;
  *
  * - Atomic ticket calling with SELECT ... FOR UPDATE
  * - Intelligent wait-time estimation
- * - Race-condition free operations
+ * - Race-condition free operations via transactions
  * - Event emission for SSE consumers
  */
 final class QueueService
 {
     private const BUFFER_MINUTES = 3;
     private const TICKET_PREFIX  = 'A';
+    private const MAX_EVENTS     = 500;
 
     /**
      * Create a new walk-in ticket.
      *
      * @param array{name:string, phone:string, service_ids:int[], stylist_id?:int|null} $data
+     * @return array<string, mixed>
      */
     public function createTicket(array $data): array
     {
@@ -36,22 +38,17 @@ final class QueueService
             throw new RuntimeException('The walk-in queue is currently paused. Please try again later.');
         }
 
-        // Enforce max queue size
-        $maxSize = (int)($settings['max_queue_size'] ?? 50);
-        $currentSize = Database::fetch(
-            "SELECT COUNT(*) AS cnt FROM tickets WHERE status IN ('waiting','called')"
-        );
-        if ((int)($currentSize['cnt'] ?? 0) >= $maxSize) {
+        $maxSize = (int) ($settings['max_queue_size'] ?? 50);
+        $currentSize = Database::count('tickets', "status IN ('waiting','called')");
+        if ($currentSize >= $maxSize) {
             throw new RuntimeException('Queue is full. Please try again later.');
         }
 
-        $pdo = Database::getInstance();
-        $pdo->beginTransaction();
-
-        try {
+        return Database::transaction(function () use ($data) {
             $placeholders = implode(',', array_fill(0, count($data['service_ids']), '?'));
             $services = Database::fetchAll(
-                "SELECT id, duration_minutes, price_etb FROM services WHERE id IN ($placeholders) AND is_active = 1",
+                "SELECT id, duration_minutes, price_etb FROM services
+                 WHERE id IN ($placeholders) AND is_active = 1",
                 $data['service_ids']
             );
 
@@ -59,21 +56,21 @@ final class QueueService
                 throw new RuntimeException('One or more selected services are invalid.');
             }
 
-            $totalPrice    = (float)array_sum(array_column($services, 'price_etb'));
-            $totalDuration = (int)array_sum(array_column($services, 'duration_minutes'));
-            $stylistId     = !empty($data['stylist_id']) ? (int)$data['stylist_id'] : null;
+            $totalPrice    = (float) array_sum(array_column($services, 'price_etb'));
+            $totalDuration = (int) array_sum(array_column($services, 'duration_minutes'));
+            $stylistId     = !empty($data['stylist_id']) ? (int) $data['stylist_id'] : null;
             $estimatedWait = $this->estimateWaitTime($stylistId, $totalDuration);
             $ticketCode    = $this->generateTicketCode();
 
             $ticketId = Database::insert(
-                "INSERT INTO tickets 
-                    (ticket_code, customer_name, customer_phone, stylist_id, status, 
+                "INSERT INTO tickets
+                    (ticket_code, customer_name, customer_phone, stylist_id, status,
                      total_price_etb, estimated_wait_minutes, joined_at)
                  VALUES (?, ?, ?, ?, 'waiting', ?, ?, NOW())",
                 [
                     $ticketCode,
                     trim($data['name']),
-                    preg_replace('/\D+/', '', $data['phone']),
+                    preg_replace('/\D+/', '', $data['phone']) ?? $data['phone'],
                     $stylistId,
                     $totalPrice,
                     $estimatedWait,
@@ -88,39 +85,34 @@ final class QueueService
                 );
             }
 
-            $ticket = Database::fetch("SELECT * FROM tickets WHERE id = ?", [$ticketId]);
+            $ticket = Database::find('tickets', $ticketId);
+            if (!$ticket) {
+                throw new RuntimeException('Failed to create ticket.');
+            }
 
             $this->emitEvent('ticket_created', [
                 'ticket'   => $ticket,
                 'services' => $services,
             ]);
 
-            $pdo->commit();
             return $ticket;
-        } catch (Throwable $e) {
-            if ($pdo->inTransaction()) {
-                $pdo->rollBack();
-            }
-            throw $e;
-        }
+        });
     }
 
     /**
      * Atomically call the next ticket for a given stylist.
-     * Prefers tickets specifically assigned to this stylist, then falls back to "Any Barber".
+     * Prefers tickets assigned to this stylist, then falls back to "Any Barber".
+     *
+     * @return array<string, mixed>|null
      */
     public function callNextTicket(?int $stylistId = null): ?array
     {
-        $pdo = Database::getInstance();
-        $pdo->beginTransaction();
-
-        try {
+        return Database::transaction(function () use ($stylistId) {
             $ticket = null;
 
             if ($stylistId) {
-                // 1) Prefer tickets specifically requested for this stylist
                 $ticket = Database::fetch(
-                    "SELECT * FROM tickets 
+                    "SELECT * FROM tickets
                      WHERE status = 'waiting' AND stylist_id = ?
                      ORDER BY priority DESC, joined_at ASC
                      LIMIT 1
@@ -128,10 +120,9 @@ final class QueueService
                     [$stylistId]
                 );
 
-                // 2) Fall back to "Any Barber" tickets
                 if (!$ticket) {
                     $ticket = Database::fetch(
-                        "SELECT * FROM tickets 
+                        "SELECT * FROM tickets
                          WHERE status = 'waiting' AND stylist_id IS NULL
                          ORDER BY priority DESC, joined_at ASC
                          LIMIT 1
@@ -140,7 +131,7 @@ final class QueueService
                 }
             } else {
                 $ticket = Database::fetch(
-                    "SELECT * FROM tickets 
+                    "SELECT * FROM tickets
                      WHERE status = 'waiting'
                      ORDER BY priority DESC, joined_at ASC
                      LIMIT 1
@@ -149,47 +140,39 @@ final class QueueService
             }
 
             if (!$ticket) {
-                $pdo->commit();
                 return null;
             }
 
             $assignStylistId = $ticket['stylist_id'] ?? $stylistId;
 
             Database::execute(
-                "UPDATE tickets 
-                 SET status = 'called', 
+                "UPDATE tickets
+                 SET status = 'called',
                      called_at = NOW(),
                      stylist_id = COALESCE(stylist_id, ?)
                  WHERE id = ? AND status = 'waiting'",
                 [$assignStylistId, $ticket['id']]
             );
 
-            $updated = Database::fetch("SELECT * FROM tickets WHERE id = ?", [$ticket['id']]);
+            $updated = Database::find('tickets', $ticket['id']);
 
             $this->emitEvent('ticket_called', [
                 'ticket'     => $updated,
                 'stylist_id' => $assignStylistId,
             ]);
 
-            $pdo->commit();
             return $updated;
-        } catch (Throwable $e) {
-            if ($pdo->inTransaction()) {
-                $pdo->rollBack();
-            }
-            throw $e;
-        }
+        });
     }
 
     /**
      * Start a cut (called → in_chair).
+     *
+     * @return array<string, mixed>
      */
     public function startTicket(int $ticketId, int $stylistId): array
     {
-        $pdo = Database::getInstance();
-        $pdo->beginTransaction();
-
-        try {
+        return Database::transaction(function () use ($ticketId, $stylistId) {
             $ticket = Database::fetch(
                 "SELECT * FROM tickets WHERE id = ? AND status = 'called' FOR UPDATE",
                 [$ticketId]
@@ -200,7 +183,7 @@ final class QueueService
             }
 
             Database::execute(
-                "UPDATE tickets 
+                "UPDATE tickets
                  SET status = 'in_chair', started_at = NOW(), stylist_id = ?
                  WHERE id = ?",
                 [$stylistId, $ticketId]
@@ -211,32 +194,25 @@ final class QueueService
                 [$stylistId]
             );
 
-            $updated = Database::fetch("SELECT * FROM tickets WHERE id = ?", [$ticketId]);
+            $updated = Database::find('tickets', $ticketId);
 
             $this->emitEvent('ticket_started', [
                 'ticket'     => $updated,
                 'stylist_id' => $stylistId,
             ]);
 
-            $pdo->commit();
             return $updated;
-        } catch (Throwable $e) {
-            if ($pdo->inTransaction()) {
-                $pdo->rollBack();
-            }
-            throw $e;
-        }
+        });
     }
 
     /**
      * Finish a ticket (in_chair → completed).
+     *
+     * @return array<string, mixed>
      */
     public function completeTicket(int $ticketId): array
     {
-        $pdo = Database::getInstance();
-        $pdo->beginTransaction();
-
-        try {
+        return Database::transaction(function () use ($ticketId) {
             $ticket = Database::fetch(
                 "SELECT * FROM tickets WHERE id = ? AND status = 'in_chair' FOR UPDATE",
                 [$ticketId]
@@ -251,31 +227,24 @@ final class QueueService
                 [$ticketId]
             );
 
-            $updated = Database::fetch("SELECT * FROM tickets WHERE id = ?", [$ticketId]);
+            $updated = Database::find('tickets', $ticketId);
 
             $this->emitEvent('ticket_completed', [
                 'ticket' => $updated,
             ]);
 
-            $pdo->commit();
             return $updated;
-        } catch (Throwable $e) {
-            if ($pdo->inTransaction()) {
-                $pdo->rollBack();
-            }
-            throw $e;
-        }
+        });
     }
 
     /**
      * Cancel a ticket (only waiting or called).
+     *
+     * @return array<string, mixed>
      */
     public function cancelTicket(int $ticketId, ?string $reason = null): array
     {
-        $pdo = Database::getInstance();
-        $pdo->beginTransaction();
-
-        try {
+        return Database::transaction(function () use ($ticketId, $reason) {
             $ticket = Database::fetch(
                 "SELECT * FROM tickets WHERE id = ? AND status IN ('waiting','called') FOR UPDATE",
                 [$ticketId]
@@ -290,20 +259,14 @@ final class QueueService
                 [$reason, $ticketId]
             );
 
-            $updated = Database::fetch("SELECT * FROM tickets WHERE id = ?", [$ticketId]);
+            $updated = Database::find('tickets', $ticketId);
 
             $this->emitEvent('ticket_cancelled', [
                 'ticket' => $updated,
             ]);
 
-            $pdo->commit();
             return $updated;
-        } catch (Throwable $e) {
-            if ($pdo->inTransaction()) {
-                $pdo->rollBack();
-            }
-            throw $e;
-        }
+        });
     }
 
     /**
@@ -312,45 +275,37 @@ final class QueueService
     public function estimateWaitTime(?int $stylistId = null, int $ownDuration = 30): int
     {
         $settings = $this->getSettings();
-        $buffer   = (int)($settings['buffer_time_minutes'] ?? self::BUFFER_MINUTES);
+        $buffer   = (int) ($settings['buffer_time_minutes'] ?? self::BUFFER_MINUTES);
 
-        // People ahead in relevant queue
         if ($stylistId) {
-            $ahead = Database::fetch(
-                "SELECT COUNT(*) AS cnt FROM tickets 
-                 WHERE status IN ('waiting','called')
-                   AND (stylist_id = ? OR stylist_id IS NULL)",
+            $peopleAhead = Database::count(
+                'tickets',
+                "status IN ('waiting','called') AND (stylist_id = ? OR stylist_id IS NULL)",
                 [$stylistId]
             );
         } else {
-            $ahead = Database::fetch(
-                "SELECT COUNT(*) AS cnt FROM tickets WHERE status IN ('waiting','called')"
-            );
+            $peopleAhead = Database::count('tickets', "status IN ('waiting','called')");
         }
-        $peopleAhead = (int)($ahead['cnt'] ?? 0);
 
-        // Active chairs
-        $activeChairs = Database::fetch(
-            "SELECT COUNT(*) AS cnt FROM stylists WHERE status = 'active' AND is_available = 1"
-        );
-        $numActive = max(1, (int)($activeChairs['cnt'] ?? 1));
+        $numActive = max(1, Database::count(
+            'stylists',
+            "status = 'active' AND is_available = 1"
+        ));
 
-        // Average service duration currently in system
         $avgDuration = Database::fetch(
             "SELECT AVG(ts.duration_minutes) AS avg_dur
              FROM ticket_services ts
              JOIN tickets t ON t.id = ts.ticket_id
              WHERE t.status IN ('waiting','called','in_chair')"
         );
-        $avgService = (int)round((float)($avgDuration['avg_dur'] ?? 35));
+        $avgService = (int) round((float) ($avgDuration['avg_dur'] ?? 35));
         if ($avgService < 10) {
             $avgService = 30;
         }
 
-        // Average remaining time on current cuts
         $remaining = Database::fetch(
             "SELECT AVG(
-                GREATEST(0, 
+                GREATEST(0,
                     COALESCE((SELECT SUM(duration_minutes) FROM ticket_services WHERE ticket_id = t.id), 30)
                     - TIMESTAMPDIFF(MINUTE, t.started_at, NOW())
                 )
@@ -358,9 +313,9 @@ final class QueueService
              FROM tickets t
              WHERE t.status = 'in_chair' AND t.started_at IS NOT NULL"
         );
-        $avgRemaining = (int)round((float)($remaining['avg_remaining'] ?? 12));
+        $avgRemaining = (int) round((float) ($remaining['avg_remaining'] ?? 12));
 
-        $wait = (int)ceil(($peopleAhead * $avgService) / $numActive) + $avgRemaining + $buffer;
+        $wait = (int) ceil(($peopleAhead * $avgService) / $numActive) + $avgRemaining + $buffer;
 
         return max(0, min(180, $wait));
     }
@@ -413,11 +368,19 @@ final class QueueService
             );
         }
 
-        return (int)($row['cnt'] ?? 0) + 1;
+        return (int) ($row['cnt'] ?? 0) + 1;
     }
 
     /**
      * Full live board snapshot for TV display & SSE.
+     *
+     * @return array{
+     *   now_serving: list<array>,
+     *   up_next: list<array>,
+     *   chairs: list<array>,
+     *   settings: array,
+     *   timestamp: int
+     * }
      */
     public function getLiveBoard(): array
     {
@@ -462,15 +425,16 @@ final class QueueService
         ];
     }
 
+    /** @return array<string, mixed> */
     public function getSettings(): array
     {
-        return Database::fetch("SELECT * FROM shop_settings WHERE id = 1") ?? [];
+        return Database::fetch('SELECT * FROM shop_settings WHERE id = 1') ?? [];
     }
 
     public function setQueuePaused(bool $paused): void
     {
         Database::execute(
-            "UPDATE shop_settings SET is_queue_paused = ? WHERE id = 1",
+            'UPDATE shop_settings SET is_queue_paused = ? WHERE id = 1',
             [$paused ? 1 : 0]
         );
         $this->emitEvent('queue_paused', ['paused' => $paused]);
@@ -479,18 +443,18 @@ final class QueueService
     private function emitEvent(string $type, array $payload): void
     {
         Database::execute(
-            "INSERT INTO events (event_type, payload) VALUES (?, ?)",
+            'INSERT INTO events (event_type, payload) VALUES (?, ?)',
             [$type, json_encode($payload, JSON_UNESCAPED_UNICODE)]
         );
 
-        // Keep only the most recent 500 events
-        Database::execute(
-            "DELETE FROM events WHERE id NOT IN (
-                SELECT id FROM (
-                    SELECT id FROM events ORDER BY id DESC LIMIT 500
-                ) AS keep_ids
-            )"
+        // Keep only the most recent MAX_EVENTS rows (MySQL-safe, no nested subquery issue)
+        $maxId = Database::fetchColumn(
+            'SELECT id FROM events ORDER BY id DESC LIMIT 1 OFFSET ' . (self::MAX_EVENTS - 1)
         );
+
+        if ($maxId !== false && $maxId !== null) {
+            Database::execute('DELETE FROM events WHERE id < ?', [(int) $maxId]);
+        }
     }
 
     /**
@@ -498,21 +462,16 @@ final class QueueService
      */
     private function generateTicketCode(): string
     {
-        $todayCount = Database::fetch(
-            "SELECT COUNT(*) AS cnt FROM tickets WHERE DATE(joined_at) = CURDATE()"
-        );
-        $seq = ((int)($todayCount['cnt'] ?? 0)) + 1;
+        $todayCount = Database::count('tickets', 'DATE(joined_at) = CURDATE()');
+        $seq = $todayCount + 1;
 
-        // Guard against collisions under concurrency
         for ($i = 0; $i < 5; $i++) {
-            $code = self::TICKET_PREFIX . '-' . str_pad((string)($seq + $i), 2, '0', STR_PAD_LEFT);
-            $exists = Database::fetch("SELECT id FROM tickets WHERE ticket_code = ?", [$code]);
-            if (!$exists) {
+            $code = self::TICKET_PREFIX . '-' . str_pad((string) ($seq + $i), 2, '0', STR_PAD_LEFT);
+            if (!Database::exists('tickets', 'ticket_code = ?', [$code])) {
                 return $code;
             }
         }
 
-        // Fallback: use timestamp suffix
         return self::TICKET_PREFIX . '-' . date('His');
     }
 }
