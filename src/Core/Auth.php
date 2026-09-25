@@ -15,8 +15,10 @@ final class Auth
             session_set_cookie_params([
                 'lifetime' => 86400 * 7,
                 'path'     => '/',
-                'httponly'  => true,
-                'samesite'  => 'Lax',
+                'httponly' => true,
+                'samesite' => 'Lax',
+                // secure flag: enable when site is served over HTTPS (AeonFree free SSL)
+                'secure'   => (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off'),
             ]);
             session_start();
         }
@@ -43,6 +45,16 @@ final class Auth
     public static function normalizePhone(string $phone): string
     {
         return preg_replace('/\D+/', '', $phone) ?? '';
+    }
+
+    /**
+     * Hash password with best available algorithm.
+     * Argon2id preferred; falls back to bcrypt on hosts without Argon2 (common on free shared hosting).
+     */
+    public static function hashPassword(string $password): string
+    {
+        $algo = defined('PASSWORD_ARGON2ID') ? PASSWORD_ARGON2ID : PASSWORD_BCRYPT;
+        return password_hash($password, $algo);
     }
 
     public static function attempt(string $phone, string $password): ?array
@@ -74,12 +86,12 @@ final class Auth
     {
         self::startSession();
         $_SESSION[self::SESSION_KEY] = [
-            'id'         => (int)$user['id'],
-            'full_name'  => $user['full_name'],
-            'phone'      => $user['phone'],
-            'role'       => $user['role'],
-            'lang'       => $user['preferred_lang'] ?? 'en',
-            'member_tier'=> $user['member_tier'] ?? 'regular',
+            'id'          => (int) $user['id'],
+            'full_name'   => $user['full_name'],
+            'phone'       => $user['phone'],
+            'role'        => $user['role'],
+            'lang'        => $user['preferred_lang'] ?? 'en',
+            'member_tier' => $user['member_tier'] ?? 'regular',
         ];
     }
 
@@ -90,7 +102,15 @@ final class Auth
         $_SESSION = [];
         if (ini_get('session.use_cookies')) {
             $p = session_get_cookie_params();
-            setcookie(session_name(), '', time() - 42000, $p['path'], $p['domain'] ?? '', $p['secure'] ?? false, $p['httponly'] ?? true);
+            setcookie(
+                session_name(),
+                '',
+                time() - 42000,
+                $p['path'],
+                $p['domain'] ?? '',
+                $p['secure'] ?? false,
+                $p['httponly'] ?? true
+            );
         }
         session_destroy();
     }
@@ -110,7 +130,7 @@ final class Auth
     public static function id(): ?int
     {
         $u = self::user();
-        return $u ? (int)$u['id'] : null;
+        return $u ? (int) $u['id'] : null;
     }
 
     public static function role(): ?string
@@ -131,7 +151,7 @@ final class Auth
 
     public static function requireRole(string|array $roles, bool $json = false): void
     {
-        $roles = (array)$roles;
+        $roles = (array) $roles;
         if (!self::check() || !in_array(self::role(), $roles, true)) {
             if ($json) {
                 http_response_code(401);
@@ -161,7 +181,7 @@ final class Auth
             throw new RuntimeException('Phone number already registered.');
         }
 
-        $hash = password_hash($password, PASSWORD_ARGON2ID);
+        $hash = self::hashPassword($password);
 
         $id = Database::insert(
             "INSERT INTO users (full_name, phone, password_hash, role, preferred_lang, member_tier, created_at)

@@ -8,8 +8,8 @@ use PDOException;
 use PDOStatement;
 
 /**
- * Production-ready PDO Database singleton with connection pooling support
- * and helper methods for common operations.
+ * Production-ready PDO Database singleton.
+ * Compatible with AeonFree / shared MySQL 8 hosting.
  */
 final class Database
 {
@@ -36,22 +36,31 @@ final class Database
                 self::$config = require $configFile;
             }
 
+            $driver   = self::$config['driver']   ?? 'mysql';
+            $host     = self::$config['host']     ?? 'localhost';
+            $port     = (int) (self::$config['port'] ?? 3306);
+            $database = self::$config['database'] ?? self::$config['dbname'] ?? 'hair_queue';
+            $charset  = self::$config['charset']  ?? 'utf8mb4';
+            $username = self::$config['username'] ?? self::$config['user'] ?? 'root';
+            $password = self::$config['password'] ?? self::$config['pass'] ?? '';
+
             $dsn = sprintf(
                 '%s:host=%s;port=%d;dbname=%s;charset=%s',
-                self::$config['driver'],
-                self::$config['host'],
-                self::$config['port'],
-                self::$config['database'],
-                self::$config['charset']
+                $driver,
+                $host,
+                $port,
+                $database,
+                $charset
             );
 
+            $options = self::$config['options'] ?? [
+                PDO::ATTR_ERRMODE            => PDO::ERRMODE_EXCEPTION,
+                PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC,
+                PDO::ATTR_EMULATE_PREPARES   => false,
+            ];
+
             try {
-                self::$instance = new PDO(
-                    $dsn,
-                    self::$config['username'],
-                    self::$config['password'],
-                    self::$config['options'] ?? []
-                );
+                self::$instance = new PDO($dsn, $username, $password, $options);
             } catch (PDOException $e) {
                 error_log('Database connection failed: ' . $e->getMessage());
                 throw new \RuntimeException('Unable to connect to the database. Please try again later.');
