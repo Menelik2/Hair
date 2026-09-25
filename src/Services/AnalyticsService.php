@@ -57,6 +57,7 @@ final class AnalyticsService
         ];
     }
 
+    /** @return list<array{date:string, label:string, revenue:float, cuts:int}> */
     public function getSevenDayRevenue(): array
     {
         $rows = Database::fetchAll(
@@ -92,6 +93,7 @@ final class AnalyticsService
         return $result;
     }
 
+    /** @return list<array{hour:int, label:string, cuts:int, revenue:float}> */
     public function getHourlyVolume(): array
     {
         $rows = Database::fetchAll(

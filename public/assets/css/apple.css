@@ -12,7 +12,6 @@
   --ios-orange: #ff9500;
   --ios-red: #ff3b30;
   --ios-fill: rgba(120, 120, 128, 0.12);
-  --ios-fill-2: rgba(120, 120, 128, 0.16);
   --ios-radius: 12px;
   --ios-radius-lg: 16px;
   --ios-radius-xl: 20px;
@@ -31,37 +30,13 @@ body.ios {
   background: var(--ios-bg);
   color: var(--ios-label);
   -webkit-font-smoothing: antialiased;
-  -moz-osx-font-smoothing: grayscale;
   overscroll-behavior-y: none;
 }
 
-.ios-large-title {
-  font-size: 34px;
-  font-weight: 700;
-  letter-spacing: 0.37px;
-  line-height: 1.2;
-}
-
-.ios-title {
-  font-size: 17px;
-  font-weight: 600;
-  letter-spacing: -0.41px;
-}
-
-.ios-body {
-  font-size: 17px;
-  font-weight: 400;
-  letter-spacing: -0.41px;
-  line-height: 1.29;
-}
-
-.ios-subhead {
-  font-size: 15px;
-  font-weight: 400;
-  letter-spacing: -0.24px;
-  color: var(--ios-secondary);
-  opacity: 0.6;
-}
+.ios-large-title { font-size: 34px; font-weight: 700; letter-spacing: 0.37px; line-height: 1.2; }
+.ios-title { font-size: 17px; font-weight: 600; letter-spacing: -0.41px; }
+.ios-body { font-size: 17px; font-weight: 400; letter-spacing: -0.41px; line-height: 1.29; }
+.ios-subhead { font-size: 15px; font-weight: 400; letter-spacing: -0.24px; color: var(--ios-secondary); opacity: 0.6; }
 
 .ios-nav {
   background: rgba(242, 242, 247, 0.72);
@@ -71,45 +46,22 @@ body.ios {
   padding-top: var(--safe-top);
 }
 
-.ios-group {
-  background: var(--ios-card);
-  border-radius: var(--ios-radius-lg);
-  overflow: hidden;
-}
-
+.ios-group { background: var(--ios-card); border-radius: var(--ios-radius-lg); overflow: hidden; }
 .ios-row {
-  display: flex;
-  align-items: center;
-  min-height: 44px;
-  padding: 11px 16px;
-  background: var(--ios-card);
-  border-bottom: 0.5px solid var(--ios-separator);
+  display: flex; align-items: center; min-height: 44px; padding: 11px 16px;
+  background: var(--ios-card); border-bottom: 0.5px solid var(--ios-separator);
 }
-
 .ios-row:last-child { border-bottom: none; }
 .ios-row:active { background: var(--ios-fill); }
-
-.ios-card {
-  background: var(--ios-card);
-  border-radius: var(--ios-radius-xl);
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
-}
+.ios-card { background: var(--ios-card); border-radius: var(--ios-radius-xl); box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04); }
 
 .ios-btn {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  min-height: 50px;
-  padding: 14px 20px;
-  border-radius: 14px;
-  font-size: 17px;
-  font-weight: 600;
-  letter-spacing: -0.41px;
-  border: none;
-  cursor: pointer;
+  display: inline-flex; align-items: center; justify-content: center;
+  min-height: 50px; padding: 14px 20px; border-radius: 14px;
+  font-size: 17px; font-weight: 600; letter-spacing: -0.41px;
+  border: none; cursor: pointer;
   transition: transform 0.15s ease, opacity 0.15s ease;
 }
-
 .ios-btn:active { transform: scale(0.97); opacity: 0.9; }
 .ios-btn-primary { background: var(--ios-blue); color: #fff; }
 .ios-btn-filled { background: #000; color: #fff; }
@@ -119,37 +71,23 @@ body.ios {
 .safe-top { padding-top: max(12px, var(--safe-top)); }
 
 body.ios-dark {
-  --ios-bg: #000000;
-  --ios-card: #1c1c1e;
-  --ios-label: #ffffff;
-  --ios-secondary: #ebebf5;
-  --ios-tertiary: #ebebf599;
-  --ios-separator: rgba(84, 84, 88, 0.65);
-  --ios-fill: rgba(120, 120, 128, 0.24);
-  background: #000;
-  color: #fff;
+  --ios-bg: #000000; --ios-card: #1c1c1e; --ios-label: #ffffff;
+  --ios-secondary: #ebebf5; --ios-tertiary: #ebebf599;
+  --ios-separator: rgba(84, 84, 88, 0.65); --ios-fill: rgba(120, 120, 128, 0.24);
+  background: #000; color: #fff;
 }
-
-body.ios-dark .ios-nav {
-  background: rgba(0, 0, 0, 0.72);
-}
+body.ios-dark .ios-nav { background: rgba(0, 0, 0, 0.72); }
 
 @keyframes ios-fade-up {
   from { opacity: 0; transform: translateY(12px); }
   to { opacity: 1; transform: translateY(0); }
 }
-
-.ios-enter {
-  animation: ios-fade-up 0.35s cubic-bezier(0.25, 0.1, 0.25, 1) both;
-}
+.ios-enter { animation: ios-fade-up 0.35s cubic-bezier(0.25, 0.1, 0.25, 1) both; }
 
 @supports (padding: max(0px)) {
   .safe-bottom { padding-bottom: max(16px, env(safe-area-inset-bottom)); }
   .safe-top { padding-top: max(12px, env(safe-area-inset-top)); }
 }
-
 @media (pointer: coarse) {
-  button, .ios-btn, a.native-tab {
-    min-height: 44px;
-  }
+  button, .ios-btn, a.native-tab { min-height: 44px; }
 }

@@ -3,7 +3,6 @@ declare(strict_types=1);
 
 /**
  * Application bootstrap
- * Include this at the top of every public PHP entry point.
  */
 
 error_reporting(E_ALL);
