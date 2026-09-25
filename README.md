@@ -24,13 +24,13 @@ Production-ready **PHP 8.2+** system with native iOS-style mobile UI and PWA sup
 
 ## Stack
 
-- PHP 8.2+ (strict), PDO, MySQL
+- PHP 8.2+ (strict), PDO, MySQL 8
 - Tailwind + Alpine.js + Chart.js
 - SSE real-time updates
-- Auth (Argon2id + RBAC)
+- Auth (Argon2id with bcrypt fallback + RBAC)
 - Bilingual EN / Amharic
 
-## Quick Start
+## Quick Start (local)
 
 ```bash
 git clone https://github.com/Menelik2/Hair.git
@@ -43,6 +43,18 @@ mysql -u root -p hair_queue < database/schema.sql
 
 cd public && php -S localhost:8080
 ```
+
+## Deploy on AeonFree (free hosting)
+
+See the full guide: **[DEPLOY-AEONFREE.md](DEPLOY-AEONFREE.md)**
+
+Short version:
+1. Create hosting account + MySQL database on AeonFree
+2. Set PHP to **8.2**
+3. Upload files so `public/` contents land in `htdocs/` (with `src/`, `config/`, `database/` next to them)
+4. Create `.env` with your DB credentials
+5. Import `database/schema.sql` via phpMyAdmin
+6. Create `storage/logs/` folder
 
 ## Demo login
 
