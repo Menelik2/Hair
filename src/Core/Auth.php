@@ -22,14 +22,14 @@ final class Auth
         }
     }
 
-    public static function attempt(string $phone, string $password): ?array
+    /** @return list<string> */
+    public static function phoneVariants(string $phone): array
     {
         $digits = preg_replace('/\D+/', '', $phone) ?? '';
         if ($digits === '') {
-            return null;
+            return [];
         }
-
-        $candidates = array_unique(array_filter([
+        return array_values(array_unique(array_filter([
             $phone,
             $digits,
             '+' . $digits,
@@ -37,12 +37,25 @@ final class Auth
             (str_starts_with($digits, '0') ? '251' . substr($digits, 1) : null),
             (str_starts_with($digits, '0') ? '+251' . substr($digits, 1) : null),
             (str_starts_with($digits, '251') ? '+251' . substr($digits, 3) : null),
-        ]));
+        ])));
+    }
+
+    public static function normalizePhone(string $phone): string
+    {
+        return preg_replace('/\D+/', '', $phone) ?? '';
+    }
+
+    public static function attempt(string $phone, string $password): ?array
+    {
+        $candidates = self::phoneVariants($phone);
+        if ($candidates === []) {
+            return null;
+        }
 
         $placeholders = implode(',', array_fill(0, count($candidates), '?'));
         $user = Database::fetch(
             "SELECT * FROM users WHERE phone IN ($placeholders) LIMIT 1",
-            array_values($candidates)
+            $candidates
         );
 
         if (!$user || empty($user['password_hash'])) {
@@ -133,7 +146,7 @@ final class Auth
 
     public static function register(string $name, string $phone, string $password, string $lang = 'en'): array
     {
-        $phone = preg_replace('/\D+/', '', $phone);
+        $phone = self::normalizePhone($phone);
         if (strlen($phone) < 9) {
             throw new RuntimeException('Invalid phone number.');
         }
@@ -141,7 +154,9 @@ final class Auth
             throw new RuntimeException('Password must be at least 6 characters.');
         }
 
-        $exists = Database::fetch("SELECT id FROM users WHERE phone = ?", [$phone]);
+        $variants = self::phoneVariants($phone);
+        $placeholders = implode(',', array_fill(0, count($variants), '?'));
+        $exists = Database::fetch("SELECT id FROM users WHERE phone IN ($placeholders)", $variants);
         if ($exists) {
             throw new RuntimeException('Phone number already registered.');
         }
